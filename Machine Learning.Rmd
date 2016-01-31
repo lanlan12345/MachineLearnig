@@ -1,5 +1,5 @@
 ---
-title: "Recognition of weight lifting exercises"
+title: "Recognition of weight lifting exercises - (https://github.com/lanlan12345/MachineLearnig)"
 date: January 30, 2016
 output: 
   html_document:
