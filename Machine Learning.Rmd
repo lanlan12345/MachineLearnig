@@ -1,12 +1,12 @@
 ---
-title: "Recognition of weight lifting exercises - (https://github.com/lanlan12345/MachineLearnig)"
+title: "Recognition of weight lifting exercises"
 date: January 30, 2016
 output: 
   html_document:
     toc: true
     toc_float: true
-    theme: spacelab
-    highlight: monochrome
+    theme: cosmo
+    highlight: textmate
 ---
 
 
@@ -110,8 +110,8 @@ Then the result of testing is quite satisfactory, with an accurancy of 99.39%.
 confusionMatrix(test$classe,predict(rf,test))
 ```
 
-## 4. Cross Validation
-We use k-fold cross validation setting `k=6`. Each subset is used for training and testing. The result of each validation is quite satisfactory with a minimum value of 0.9936,  showing good reliability of random forest method to sovle the problem.
+## 4. Cross Validation and Expected Out of Sample Error
+We use k-fold cross validation setting `k=6`. Each subset is used for training and testing. The result of each validation is quite satisfactory with a minimum value of 0.9936, showing good reliability of random forest method to sovle the problem. The **expected out of sample accurancy** is 99.54%  and the **expected out of sample error** is 0.46% for the final model.
 
 ```{r,message=FALSE, warning=FALSE,cache=TRUE}
 K=6
@@ -142,7 +142,7 @@ print(time)
 ```
 
 
-## 5. Predict 20 obersavtions with unknown classe.
+## 5. Predict 20 Obersavtions
 We use all the given training data to train the random forest model and use the model o predict 20 unknown cases, then results are shown as follows.
 ```{r,message=FALSE, warning=FALSE,cache=TRUE}
 set.seed(1000)
@@ -184,6 +184,7 @@ For the same training and testing data, we have following results:
 | Random Forest (ntree =70) | 99.4%            | 7.6 |
 | GBM   (n.trees=1000)        | 57.7%          | 83 |
 | LDA           | 69.5% |14 |
+
 
 From above experiments, we can see clearly that random forest is an efficient and reliable method to solve in this problem.
 
