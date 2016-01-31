@@ -1,0 +1,189 @@
+---
+title: "Recognition of weight lifting exercises"
+date: January 30, 2016
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    theme: spacelab
+    highlight: monochrome
+---
+
+
+## 1. Background
+This project is to use proper machine learning method to investigate "how (well)" an activity was performed by using data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+More information is available from the website here: <http://groupware.les.inf.puc-rio.br/har> 
+ 
+ Data are downloaded from the website:
+ 
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv>
+
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv>
+
+## 2. Get and Clean Data
+
+First of all, we load the library to be used and  import raw data as two variables `raw.training` and `raw.testing` from the files downloaded  the sites above.
+
+```{r,message=FALSE, warning=FALSE,cache=TRUE}
+library(caret)
+library(randomForest)
+raw.training <- read.csv("pml-training.csv",na.strings="NA")
+raw.testing <- read.csv("pml-testing.csv",na.strings="NA")
+```
+
+We noticed that the datasets have 160 variables and respectively 19,622 and 20 observertions for each. 
+```{r,message=FALSE, warning=FALSE,cache=TRUE}
+dim(raw.testing)
+dim(raw.training)
+```
+### 2.1 Removing the "NA" and empty columns
+Among those 160 variables, many columnes are marked as `NA` or empty values, for example, kurtosis, skewness, max, min, amplitude etc. We try to remove those values in `raw.training` data in order to have a clean dataset before training, named `pretrain`. 
+
+```{r,message=FALSE, warning=FALSE,cache=TRUE}
+check <- apply(raw.training,2,function(x) sum(is.na(x))/length(x))
+keep <- names(check[which(check < 0.5)])
+pretrain <- raw.training[keep]
+```
+
+```{r,message=FALSE, warning=FALSE,cache=TRUE}
+check <-  apply(pretrain,2,function(x) sum(x=="")/length(x))
+keep <- names(check[which(check < 0.5)])
+pretrain <- pretrain[keep]
+```
+
+### 2.2 Removing zero covariates
+Through previous step, the number of variables is reduced to 60. For the next, we are going to remove the zero covariates. `new_window` is recongnized as a zero covariate and is removed from `pretrain` 
+```{r,message=FALSE, warning=FALSE,cache=TRUE}
+check <- nearZeroVar(pretrain,saveMetrics=TRUE,names = T)
+subset(check,nzv==T)
+keep <- rownames(subset(check,nzv==F))
+pretrain <- pretrain[keep]
+```
+### 2.3 Removing names, times,etc.
+Some variables that are not related to the quantitive record and may mislead the training, such as `X`, `user_names`, `time` etc. we clean them as following.
+```{r,message=FALSE, warning=FALSE,cache=TRUE}
+pretrain <- pretrain[,-(1:6)]
+```
+So far, the remaining variables are 53 in total.
+```{r,message=FALSE, warning=FALSE,cache=TRUE}
+names(pretrain)
+```
+The same variables in `raw.testing` are reserved to perform the final test with 20 observation.
+```{r,message=FALSE, warning=FALSE,cache=TRUE}
+pretest <- raw.testing[names(raw.testing) %in% names(pretrain)]
+```
+
+
+## 3. Training the data with Random Forest
+The `pretrain` dataset is divided into two parts (3:1) used for training and testing:
+```{r,message=FALSE, warning=FALSE,cache=TRUE}
+set.seed(61987)
+trainInd <- createDataPartition(pretrain$classe, p=0.75, list=F)
+train <- pretrain[trainInd,]
+test <- pretrain[-trainInd,]
+```
+
+```{r,message=FALSE, warning=FALSE,cache=TRUE}
+set.seed(1000)
+system.time(rf<-randomForest(as.matrix(train[,-53]),train$classe, ntree = 100))
+```
+
+The calcultion time is about 11 seconds and let's take a look at error evaluated with the numbers of trees increasing:
+```{r,message=FALSE, warning=FALSE,cache=TRUE,echo=FALSE}
+plot(rf,main = "The Error with evaluation of tree numbers")
+```
+
+The error is almost unchanged when the tree numbers reach 70. So let's try again with random forest by modifying `ntree = 70`
+
+```{r,message=FALSE, warning=FALSE,cache=TRUE}
+set.seed(1000)
+system.time(rf<-randomForest(as.matrix(train[,-53]),train$classe, ntree = 70))
+```
+The importance of variables (first 20) can be seen in below picture. The most three important variables are `roll_belt`, `yaw_belt` and `pitch_forearm`.
+
+```{r,message=FALSE, warning=FALSE,cache=TRUE,echo=FALSE}
+varImpPlot(rf,n.var=20,main = "Importance of variables")
+```
+
+Then the result of testing is quite satisfactory, with an accurancy of 99.39%.
+```{r,message=FALSE, warning=FALSE,cache=TRUE}
+confusionMatrix(test$classe,predict(rf,test))
+```
+
+## 4. Cross Validation
+We use k-fold cross validation setting `k=6`. Each subset is used for training and testing. The result of each validation is quite satisfactory with a minimum value of 0.9936,  showing good reliability of random forest method to sovle the problem.
+
+```{r,message=FALSE, warning=FALSE,cache=TRUE}
+K=6
+set.seed(1000)
+folds <- createFolds(y=pretrain$classe,k=K,list=T,returnTrain=TRUE)
+accurancy <- NULL
+time <- NULL
+for (i in 1:K) {
+        traincv <- pretrain[folds[[i]],]
+        testcv <- pretrain[-folds[[i]],]
+        set.seed(1000)
+        t1<-Sys.time()
+        rfcv <- randomForest(as.matrix(traincv[,-53]),traincv$classe,ntree=70)
+        t2<-Sys.time()
+        time[i]=t2-t1
+        pred <- predict(rfcv,testcv)
+        accurancy[i] <- sum(pred==testcv$classe)/length(testcv$classe)
+}
+```
+
+```{r,message=FALSE, warning=FALSE,cache=TRUE}
+summary(accurancy)
+```
+
+The calculation time for each validation is around 9 seconds.
+```{r,message=FALSE, warning=FALSE,cache=TRUE,echo=FALSE}
+print(time)
+```
+
+
+## 5. Predict 20 obersavtions with unknown classe.
+We use all the given training data to train the random forest model and use the model o predict 20 unknown cases, then results are shown as follows.
+```{r,message=FALSE, warning=FALSE,cache=TRUE}
+set.seed(1000)
+pred <- predict(randomForest(as.matrix(pretrain[,-53]),pretrain$classe,ntree = 70),pretest)
+print(pred)
+```
+
+## 6. Why choose random forest model?
+We have compared random forest model with some other popular classification models such as *GBM* and *LDA* in the regards of time complexity and accurancy, random forest shows a better performance among them.
+
+### 6.1 GBM method
+The gbm method goes terribly slow in `caret` package by following code:
+```{r, eval=F}
+modGbm <- train(train$classe~., data=train, method='gbm',verbose=F)
+```
+
+Thus we use `gbm` package which is actually much faster.
+```{r,message=FALSE, warning=FALSE,cache=TRUE}
+library(gbm)
+set.seed(1000)
+system.time(gbm <- gbm(classe ~., data=train, n.trees=1000, distribution="multinomial"))
+pred.gbm <-as.data.frame(predict(gbm,test,n.trees = gbm$n.trees))
+pred.gbm$result <- apply(pred.gbm,1,which.max)
+pred.gbm$result <- LETTERS[pred.gbm$result]
+confusionMatrix(test$classe,pred.gbm$result)
+```
+We can see that it takes 84 seconds and the accurancy is only 57.6%.
+
+### 6.2 LDA method
+Then we tried LDA methode, it takes 14 seconds and the accurancy is 69%
+```{r,message=FALSE, warning=FALSE,cache=TRUE}
+system.time(lda <- train(train$classe ~.,data=train,method="lda",verbose=F))
+confusionMatrix(test$classe,predict(lda,test))
+```
+For the same training and testing data, we have following results:
+
+|                  | Accurancy        | Time taken (seconds)                |
+ ----------------- | ---------------------------- | ------------------
+| Random Forest (ntree =70) | 99.4%            | 7.6 |
+| GBM   (n.trees=1000)        | 57.7%          | 83 |
+| LDA           | 69.5% |14 |
+
+From above experiments, we can see clearly that random forest is an efficient and reliable method to solve in this problem.
+
